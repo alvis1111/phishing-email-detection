@@ -1,0 +1,13 @@
+# --- 数据（体积大，不提交；可 gen-data 重新生成 / 从 Kaggle 下载） ---
+data/
+
+# --- 训练好的模型（可 train 重新生成） ---
+models/
+
+# --- Python ---
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# --- 日志 ---
+*.log
