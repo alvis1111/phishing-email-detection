@@ -5,3 +5,4 @@ xgboost>=1.6
 matplotlib>=3.5
 shap>=0.42           # 可选：仅 SHAP 特征归因需要
 kagglehub>=0.3        # 可选：仅 --data kaggle 自动下载需要
+tkinterdnd2>=0.4      # GUI 拖拽文件进窗口需要（打包时 PyInstaller hook 自动带 tkdnd 库）

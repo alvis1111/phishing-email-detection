@@ -133,7 +133,14 @@ def _build_gui(dropped: list[str] | None = None) -> None:
     import tkinter as tk
     from tkinter import filedialog, messagebox, ttk
 
-    root = tk.Tk()
+    try:
+        from tkinterdnd2 import DND_FILES, TkinterDnD
+
+        root = TkinterDnD.Tk()
+        dnd_ok = True
+    except Exception:  # noqa: BLE001
+        root = tk.Tk()
+        dnd_ok = False
     root.title("钓鱼邮件检测器")
     root.geometry("960x600")
     root.minsize(760, 480)
@@ -152,7 +159,14 @@ def _build_gui(dropped: list[str] | None = None) -> None:
     top = ttk.Frame(root, padding=10)
     top.pack(fill="x")
 
-    ttk.Label(top, text="选择要检测的邮件文件或文件夹（也可直接把文件拖到程序图标上），点「开始检测」：").pack(anchor="w")
+    drop_zone = tk.Label(
+        top,
+        text="把邮件文件 / 文件夹拖到这里，自动检测",
+        bg="#eaf2fb", fg="#005a9e", height=2, relief="ridge", bd=2,
+        font=("Microsoft YaHei", 11),
+    )
+    drop_zone.pack(fill="x", pady=(0, 6))
+    ttk.Label(top, text="或点下方按钮选择（也可把文件拖到程序图标上）：").pack(anchor="w")
 
     ctrl = ttk.Frame(top)
     ctrl.pack(fill="x", pady=8)
@@ -313,6 +327,22 @@ def _build_gui(dropped: list[str] | None = None) -> None:
                 f, index=False, encoding="utf-8-sig"
             )
             status.configure(text=f"已导出 {f}")
+
+    def _on_drop(event):
+        paths = [Path(p) for p in root.tk.splitlist(event.data)]
+        paths = [p for p in paths if p.exists()]
+        if paths:
+            state["targets"] = paths
+            state["rows"] = []
+            path_lbl.configure(text=_targets_text(state["targets"]))
+            _clear_tree()
+            _start(root, state)
+        return event.action
+
+    if dnd_ok:
+        for w in (drop_zone, root, table_frame):
+            w.drop_target_register(DND_FILES)
+            w.dnd_bind("<<Drop>>", _on_drop)
 
     if initial_targets:
         # 拖拽到 exe 上启动时，窗口就绪后自动开始检测
