@@ -89,6 +89,16 @@ PRIZE_WORDS = [
 ]
 SUSPICIOUS_PATH = {"verify", "login", "confirm", "secure", "unlock", "validate", "recover", "signin", "update"}
 
+# 中文钓鱼关键词（中文无词边界，用子串匹配）。
+# 刻意避开「续订 / 到期 / 立即 / 密码 / 验证」等正规邮件也常用的单字词，
+# 防止把微软续订这类真营销邮件误判成钓鱼。
+URGENCY_WORDS_CN = ["立即验证", "立即处理", "紧急通知", "账户异常", "账号异常", "尽快处理"]
+TIME_PRESSURE_CN = ["24小时", "24 小时", "48小时", "48 小时", "否则将", "过期将", "失效将"]
+CREDENTIAL_WORDS_CN = ["验证身份", "验证账户", "验证账号", "输入密码", "密码已过期", "密码异常", "重新认证", "凭据"]
+THREAT_WORDS_CN = ["冻结", "停用", "注销", "封号", "锁定", "永久关闭", "账户受限", "终止服务", "删除账户"]
+PRIZE_WORDS_CN = ["中奖", "抽奖", "恭喜中奖", "奖金", "奖品", "免费领取", "领奖", "幸运用户"]
+GENERIC_GREETING_CN = ["尊敬的客户", "亲爱的用户", "尊敬的会员"]
+
 URL_RE = re.compile(r'https?://[^\s<>"\'()]+')
 EMAIL_RE = re.compile(r'<([^>]+)>')
 IPV4_RE = re.compile(r'^(\d{1,3}\.){3}\d{1,3}$')
@@ -217,6 +227,11 @@ def _has_any_word(text: str, words: list[str]) -> bool:
     return any(re.search(rf"\b{re.escape(w)}\b", text) for w in words)
 
 
+def _has_any_cn(text: str, words: list[str]) -> bool:
+    """中文子串匹配（中文无词边界，直接按子串判存在）。"""
+    return any(w in text for w in words)
+
+
 def extract_body_features(body: str) -> dict:
     words = body.split()
     n_chars = len(body)
@@ -229,15 +244,17 @@ def extract_body_features(body: str) -> dict:
         "body_word_count": len(words),
         "body_caps_ratio": (n_upper / n_letters) if n_letters else 0.0,
         "body_exclamation_count": body.count("!"),
-        "body_urgency_count": sum(lower.count(w) for w in URGENCY_WORDS),
-        "body_generic_greeting": int(any(g in lower for g in [
-            "dear customer", "dear user", "dear valued", "valued customer", "dear account holder"])),
+        "body_urgency_count": sum(lower.count(w) for w in URGENCY_WORDS) + sum(body.count(w) for w in URGENCY_WORDS_CN),
+        "body_generic_greeting": int(
+            any(g in lower for g in [
+                "dear customer", "dear user", "dear valued", "valued customer", "dear account holder"])
+            or _has_any_cn(body, GENERIC_GREETING_CN)),
         "body_has_click_here": int("click here" in lower),
-        "body_has_verify": int("verify" in lower),
-        "body_has_credential": int(_has_any_word(lower, CREDENTIAL_WORDS)),
-        "body_has_threat": int(_has_any_word(lower, THREAT_WORDS)),
-        "body_has_prize": int(_has_any_word(lower, PRIZE_WORDS)),
-        "body_has_time_pressure": int(_has_any_word(lower, TIME_PRESSURE)),
+        "body_has_verify": int("verify" in lower or _has_any_cn(body, ["立即验证", "验证身份", "验证账户", "验证账号"])),
+        "body_has_credential": int(_has_any_word(lower, CREDENTIAL_WORDS) or _has_any_cn(body, CREDENTIAL_WORDS_CN)),
+        "body_has_threat": int(_has_any_word(lower, THREAT_WORDS) or _has_any_cn(body, THREAT_WORDS_CN)),
+        "body_has_prize": int(_has_any_word(lower, PRIZE_WORDS) or _has_any_cn(body, PRIZE_WORDS_CN)),
+        "body_has_time_pressure": int(_has_any_word(lower, TIME_PRESSURE) or _has_any_cn(body, TIME_PRESSURE_CN)),
     }
 
 
