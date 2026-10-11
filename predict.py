@@ -117,6 +117,8 @@ if __name__ == "__main__":
 
     predict_email(artifact, email)
     if not args.no_shap:
-        from explain import explain_email
+        # 用 importlib 动态加载，避免打包工具按字节码把 explain -> shap -> torch 一并卷入
+        import importlib
 
+        explain_email = importlib.import_module("explain").explain_email
         explain_email(artifact, email, top_k=args.shap_top)

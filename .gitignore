@@ -3,6 +3,11 @@ data/
 
 # --- 训练好的模型（已提交 model_artifact.joblib 供直接预测） ---
 
+# --- 打包产物（PyInstaller） ---
+build/
+dist/
+*.spec
+
 # --- Python ---
 __pycache__/
 *.pyc
