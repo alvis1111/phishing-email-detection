@@ -1,8 +1,8 @@
 """钓鱼邮件检测器 — 图形界面（免命令行）。
 
-打包成 exe 后双击运行：选择邮件文件或文件夹，点「开始检测」即可，结果实时显示并保存 CSV。
+打包成 exe 后双击运行，或直接把邮件文件/文件夹拖到 exe 图标上（自动检测）。
 
-开发环境运行：python gui.py
+开发环境运行：python gui.py [邮件文件或文件夹 ...]
 打包后自检：  PhishingDetector.exe --selftest
 """
 from __future__ import annotations
@@ -53,12 +53,14 @@ def collect(target: Path) -> list[tuple[str, dict]]:
     return items
 
 
-def detect(target: Path, artifact: dict) -> list[dict]:
-    """批量判定，返回结果行列表（按风险分降序）。"""
+def detect(targets: list[Path], artifact: dict) -> list[dict]:
+    """批量判定一组文件/文件夹，返回结果行列表（按风险分降序）。"""
     from features import build_full_features, explain_signals, extract_features
     from predict import apply_risk_rules, risk_level
 
-    items = collect(target)
+    items: list[tuple[str, dict]] = []
+    for t in targets:
+        items.extend(collect(t))
     if not items:
         return []
 
@@ -116,7 +118,7 @@ def _selftest() -> int:
         p = Path(d) / "sample.eml"
         p.write_bytes(sample.encode("utf-8"))
         artifact = load_model()
-        rows = detect(p, artifact)
+        rows = detect([p], artifact)
         if not rows:
             print("SELFTEST FAIL: no rows")
             return 1
@@ -127,7 +129,7 @@ def _selftest() -> int:
 
 # ---------------- GUI ----------------
 
-def _build_gui() -> None:
+def _build_gui(dropped: list[str] | None = None) -> None:
     import tkinter as tk
     from tkinter import filedialog, messagebox, ttk
 
@@ -136,22 +138,23 @@ def _build_gui() -> None:
     root.geometry("960x600")
     root.minsize(760, 480)
 
-    state = {"artifact": None, "target": None, "rows": []}
+    initial_targets = [Path(p) for p in (dropped or []) if Path(p).exists()]
+    state = {"artifact": None, "targets": initial_targets, "rows": []}
 
     # 顶部控制栏
     top = ttk.Frame(root, padding=10)
     top.pack(fill="x")
 
-    ttk.Label(top, text="选择要检测的邮件文件或文件夹，然后点「开始检测」：").pack(anchor="w")
+    ttk.Label(top, text="选择要检测的邮件文件或文件夹（也可直接把文件拖到程序图标上），点「开始检测」：").pack(anchor="w")
 
     ctrl = ttk.Frame(top)
     ctrl.pack(fill="x", pady=8)
-    ttk.Button(ctrl, text="选择文件…", command=lambda: _pick_file(root, state)).pack(side="left")
+    ttk.Button(ctrl, text="选择文件…", command=lambda: _pick_files(root, state)).pack(side="left")
     ttk.Button(ctrl, text="选择文件夹…", command=lambda: _pick_dir(root, state)).pack(side="left", padx=(6, 0))
     ttk.Button(ctrl, text="开始检测", command=lambda: _start(root, state)).pack(side="left", padx=(16, 0))
     ttk.Button(ctrl, text="导出 CSV…", command=lambda: _export(state)).pack(side="left", padx=(6, 0))
 
-    path_lbl = ttk.Label(ctrl, text="（未选择）", foreground="#666")
+    path_lbl = ttk.Label(ctrl, text=_targets_text(state["targets"]), foreground="#666")
     path_lbl.pack(side="left", padx=(12, 0))
 
     # 结果表
@@ -205,23 +208,30 @@ def _build_gui() -> None:
     status = ttk.Label(root, text="就绪", foreground="#666", padding=(10, 4))
     status.pack(fill="x", side="bottom")
 
-    def _pick_file(root, state):
-        f = filedialog.askopenfilename(
+    def _targets_text(targets: list[Path]) -> str:
+        if not targets:
+            return "（未选择）"
+        if len(targets) == 1:
+            return str(targets[0])
+        return f"{len(targets)} 项：{targets[0]} …"
+
+    def _pick_files(root, state):
+        fs = filedialog.askopenfilenames(
             title="选择邮件文件",
             filetypes=[("邮件文件", "*.eml *.txt *.mbox"), ("所有文件", "*.*")],
         )
-        if f:
-            state["target"] = Path(f)
+        if fs:
+            state["targets"] = [Path(f) for f in fs]
             state["rows"] = []
-            path_lbl.configure(text=str(state["target"]))
+            path_lbl.configure(text=_targets_text(state["targets"]))
             _clear_tree()
 
     def _pick_dir(root, state):
         d = filedialog.askdirectory(title="选择邮件文件夹")
         if d:
-            state["target"] = Path(d)
+            state["targets"] = [Path(d)]
             state["rows"] = []
-            path_lbl.configure(text=str(state["target"]))
+            path_lbl.configure(text=_targets_text(state["targets"]))
             _clear_tree()
 
     def _clear_tree():
@@ -238,7 +248,7 @@ def _build_gui() -> None:
             tree.insert("", "end", iid=str(i), values=(r["file"], r["score"], r["risk"], r["sender"], r["subject"]), tags=(tag,))
 
     def _start(root, state):
-        if not state["target"]:
+        if not state["targets"]:
             messagebox.showwarning("提示", "请先选择邮件文件或文件夹。")
             return
         status.configure(text="正在加载模型并检测，请稍候…")
@@ -250,7 +260,7 @@ def _build_gui() -> None:
             try:
                 if state["artifact"] is None:
                     state["artifact"] = load_model()
-                rows = detect(state["target"], state["artifact"])
+                rows = detect(state["targets"], state["artifact"])
                 err = None
             except Exception as e:  # noqa: BLE001
                 rows, err = [], e
@@ -274,8 +284,7 @@ def _build_gui() -> None:
         msg = f"共 {len(rows)} 封：高风险 {n_high} / 中风险 {n_mid} / 低风险 {n_low}"
         status.configure(text=msg)
 
-        # 自动保存 CSV 到所选位置旁
-        default_out = _default_out(state["target"])
+        default_out = _default_out(state["targets"])
         try:
             pd.DataFrame(rows)[["file", "sender", "subject", "score", "risk", "signals"]].to_csv(
                 default_out, index=False, encoding="utf-8-sig"
@@ -284,8 +293,9 @@ def _build_gui() -> None:
         except Exception:  # noqa: BLE001
             pass
 
-    def _default_out(target: Path) -> Path:
-        base = target if target.is_dir() else target.parent
+    def _default_out(targets: list[Path]) -> Path:
+        first = targets[0]
+        base = first if first.is_dir() else first.parent
         return base / "检测结果.csv"
 
     def _export(state):
@@ -304,10 +314,14 @@ def _build_gui() -> None:
             )
             status.configure(text=f"已导出 {f}")
 
+    if initial_targets:
+        # 拖拽到 exe 上启动时，窗口就绪后自动开始检测
+        root.after(150, lambda: _start(root, state))
+
     root.mainloop()
 
 
 if __name__ == "__main__":
     if "--selftest" in sys.argv:
         sys.exit(_selftest())
-    _build_gui()
+    _build_gui(dropped=sys.argv[1:])
