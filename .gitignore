@@ -1,8 +1,7 @@
 # --- 数据（体积大，不提交；可 gen-data 重新生成 / 从 Kaggle 下载） ---
 data/
 
-# --- 训练好的模型（可 train 重新生成） ---
-models/
+# --- 训练好的模型（已提交 model_artifact.joblib 供直接预测） ---
 
 # --- Python ---
 __pycache__/
