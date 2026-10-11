@@ -141,6 +141,13 @@ def _build_gui(dropped: list[str] | None = None) -> None:
     initial_targets = [Path(p) for p in (dropped or []) if Path(p).exists()]
     state = {"artifact": None, "targets": initial_targets, "rows": []}
 
+    def _targets_text(targets: list[Path]) -> str:
+        if not targets:
+            return "（未选择）"
+        if len(targets) == 1:
+            return str(targets[0])
+        return f"{len(targets)} 项：{targets[0]} …"
+
     # 顶部控制栏
     top = ttk.Frame(root, padding=10)
     top.pack(fill="x")
@@ -207,13 +214,6 @@ def _build_gui(dropped: list[str] | None = None) -> None:
 
     status = ttk.Label(root, text="就绪", foreground="#666", padding=(10, 4))
     status.pack(fill="x", side="bottom")
-
-    def _targets_text(targets: list[Path]) -> str:
-        if not targets:
-            return "（未选择）"
-        if len(targets) == 1:
-            return str(targets[0])
-        return f"{len(targets)} 项：{targets[0]} …"
 
     def _pick_files(root, state):
         fs = filedialog.askopenfilenames(
